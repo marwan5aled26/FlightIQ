@@ -1,11 +1,18 @@
+# Shared network for cross-container communication
+networks:
+  flightiq-net:
+    driver: bridge
+
 services:
-  # 1. Zookeeper
+  # 1. Apache Zookeeper (Required for Kafka coordination)
   zookeeper:
     image: confluentinc/cp-zookeeper:7.4.0
     container_name: flightiq-zookeeper
     environment:
       ZOOKEEPER_CLIENT_PORT: 2181
       ZOOKEEPER_TICK_TIME: 2000
+    networks:
+      - flightiq-net
 
   # 2. Apache Kafka Broker
   kafka:
@@ -22,8 +29,24 @@ services:
       KAFKA_LISTENER_SECURITY_PROTOCOL_MAP: PLAINTEXT:PLAINTEXT,PLAINTEXT_HOST:PLAINTEXT
       KAFKA_INTER_BROKER_LISTENER_NAME: PLAINTEXT
       KAFKA_OFFSETS_TOPIC_REPLICATION_FACTOR: 1
+    networks:
+      - flightiq-net
 
-  # 3. Apache Spark Master
+  # 3. Kafka UI (Web dashboard to monitor topics and messages)
+  kafka-ui:
+    image: provectuslabs/kafka-ui:latest
+    container_name: flightiq-kafka-ui
+    depends_on:
+      - kafka
+    ports:
+      - "8082:8080"
+    environment:
+      KAFKA_CLUSTERS_0_NAME: flightiq-cluster
+      KAFKA_CLUSTERS_0_BOOTSTRAPSERVERS: kafka:29092
+    networks:
+      - flightiq-net
+
+  # 4. Apache Spark Master Node
   spark-master:
     image: apache/spark:3.5.0
     container_name: flightiq-spark-master
@@ -34,8 +57,10 @@ services:
     volumes:
       - ./data:/opt/spark/work-dir/data
       - ./scripts:/opt/spark/work-dir/scripts
+    networks:
+      - flightiq-net
 
-  # 4. Apache Spark Worker
+  # 5. Apache Spark Worker Node
   spark-worker:
     image: apache/spark:3.5.0
     container_name: flightiq-spark-worker
@@ -48,19 +73,24 @@ services:
     volumes:
       - ./data:/opt/spark/work-dir/data
       - ./scripts:/opt/spark/work-dir/scripts
+    networks:
+      - flightiq-net
 
-  # 5. Hadoop HDFS NameNode
+  # 6. Hadoop HDFS NameNode
   namenode:
     image: bde2020/hadoop-namenode:2.0.0-hadoop3.2.1-java8
     container_name: flightiq-namenode
     ports:
       - "9870:9870"
+      - "9000:9000"
     environment:
       - CLUSTER_NAME=flightiq-cluster
     env_file:
       - ./hadoop.env
+    networks:
+      - flightiq-net
 
-  # 6. Hadoop HDFS DataNode
+  # 7. Hadoop HDFS DataNode
   datanode:
     image: bde2020/hadoop-datanode:2.0.0-hadoop3.2.1-java8
     container_name: flightiq-datanode
@@ -68,3 +98,17 @@ services:
       - namenode
     env_file:
       - ./hadoop.env
+    networks:
+      - flightiq-net
+
+  # 8. Apache Hive Server (Enables Power BI connection via Thrift/ODBC)
+  hive-server:
+    image: bde2020/hive:2.3.2-postgresql-metastore
+    container_name: flightiq-hive-server
+    depends_on:
+      - namenode
+      - datanode
+    ports:
+      - "10000:10000"
+    networks:
+      - flightiq-net
