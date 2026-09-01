@@ -56,7 +56,6 @@ services:
       - "7077:7077"
     volumes:
       - ./data:/opt/spark/work-dir/data
-      - ./scripts:/opt/spark/work-dir/scripts
     networks:
       - flightiq-net
 
@@ -72,7 +71,6 @@ services:
       - SPARK_WORKER_CORES=2
     volumes:
       - ./data:/opt/spark/work-dir/data
-      - ./scripts:/opt/spark/work-dir/scripts
     networks:
       - flightiq-net
 
