@@ -24,12 +24,7 @@ docker-compose up -d
 Create the Kafka topic:
 
 ```bash
-docker exec -it flightiq-kafka kafka-topics.sh \
---create \
---topic flight-events \
---bootstrap-server localhost:9092 \
---partitions 3 \
---replication-factor 1
+docker exec -it flightiq-kafka kafka-topics.sh --create --topic flight-events --bootstrap-server localhost:9092 --partitions 3 --replication-factor 1
 ```
 
 ---
@@ -45,8 +40,7 @@ docker cp data/flights.csv flightiq-namenode:/opt/data/
 Create the HDFS directory and upload the data:
 
 ```bash
-docker exec -it flightiq-namenode \
-bash -c "hdfs dfs -mkdir -p /raw/flights && hdfs dfs -put /opt/data/flights.csv /raw/flights/"
+docker exec -it flightiq-namenode bash -c "hdfs dfs -mkdir -p /raw/flights && hdfs dfs -put /opt/data/flights.csv /raw/flights/"
 ```
 
 ---
@@ -56,17 +50,13 @@ bash -c "hdfs dfs -mkdir -p /raw/flights && hdfs dfs -put /opt/data/flights.csv 
 Copy the Spark ETL script to the Spark Master:
 
 ```bash
-docker cp spark/etl_spark.py \
-flightiq-spark-master:/opt/spark/work-dir/etl_spark.py
+docker cp spark/etl_spark.py flightiq-spark-master:/opt/spark/work-dir/etl_spark.py
 ```
 
 Run Spark:
 
 ```bash
-docker exec -it flightiq-spark-master \
-/opt/spark/bin/spark-submit \
---master spark://spark-master:7077 \
-/opt/spark/work-dir/etl_spark.py
+docker exec -it flightiq-spark-master /opt/spark/bin/spark-submit --master spark://spark-master:7077 /opt/spark/work-dir/etl_spark.py
 ```
 
 ---
@@ -76,16 +66,13 @@ docker exec -it flightiq-spark-master \
 Copy the Hive SQL script:
 
 ```bash
-docker cp hive/create_hive_table.sql \
-flightiq-hive-server:/opt/hive/scripts/create_hive_table.sql
+docker cp hive/create_hive_table.sql flightiq-hive-server:/opt/hive/scripts/create_hive_table.sql
 ```
 
 Create the Hive table:
 
 ```bash
-docker exec -it flightiq-hive-server \
-/opt/hive/bin/hive \
--f /opt/hive/scripts/create_hive_table.sql
+docker exec -it flightiq-hive-server /opt/hive/bin/hive -f /opt/hive/scripts/create_hive_table.sql
 ```
 
 ---
@@ -95,16 +82,13 @@ docker exec -it flightiq-hive-server \
 Copy the analytical queries:
 
 ```bash
-docker cp hive/analytical_queries.sql \
-flightiq-hive-server:/opt/hive/scripts/analytical_queries.sql
+docker cp hive/analytical_queries.sql flightiq-hive-server:/opt/hive/scripts/analytical_queries.sql
 ```
 
 Run them when needed:
 
 ```bash
-docker exec -it flightiq-hive-server \
-/opt/hive/bin/hive \
--f /opt/hive/scripts/analytical_queries.sql
+docker exec -it flightiq-hive-server /opt/hive/bin/hive -f /opt/hive/scripts/analytical_queries.sql
 ```
 
 ---
