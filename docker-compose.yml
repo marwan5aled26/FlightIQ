@@ -3,6 +3,10 @@ networks:
   flightiq-net:
     driver: bridge
 
+volumes:
+  postgres_data:
+  pgadmin_data:
+
 services:
   # 1. Apache Zookeeper (Required for Kafka coordination)
   zookeeper:
@@ -99,14 +103,31 @@ services:
     networks:
       - flightiq-net
 
-  # 8. Apache Hive Server (Enables Power BI connection via Thrift/ODBC)
-  hive-server:
-    image: bde2020/hive:2.3.2-postgresql-metastore
-    container_name: flightiq-hive-server
-    depends_on:
-      - namenode
-      - datanode
+  # 8. PostgreSQL (Enables Power BI connection via Thrift/ODBC)
+  postgres:
+    image: postgres:13
+    container_name: flightiq-postgres
+    environment:
+      POSTGRES_USER: flightiq
+      POSTGRES_PASSWORD: flightiq
+      POSTGRES_DB: flightiq
     ports:
-      - "10000:10000"
+      - "5432:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    networks:
+      - flightiq-net
+
+  # 9. pgAdmin (Manage UI for PostgreSQL)
+  pgadmin:
+    image: dpage/pgadmin4
+    container_name: flightiq-pgadmin
+    environment:
+      PGADMIN_DEFAULT_EMAIL: admin@flightiq.com
+      PGADMIN_DEFAULT_PASSWORD: admin
+    ports:
+      - "5050:80"
+    volumes:
+      - pgadmin_data:/var/lib/pgadmin
     networks:
       - flightiq-net
