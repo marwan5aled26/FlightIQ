@@ -1,122 +1,114 @@
-# FlightIQ - Local Setup Guide
+# FlightIQ - ETL + PostgreSQL Setup
 
 ## Prerequisites
 
-| Software | Version |
-|---|---|
-| Docker Desktop | Latest |
-| Git | Latest |
-| Python | 3.8+ |
+- Docker Desktop
+- Git
 
 ---
 
-## Step 1: Clone Repository
+## 1. Clone & Start
 
 ```bash
 git clone https://github.com/marwan5aled26/FlightIQ.git
 cd FlightIQ
-```
-
----
-
-## Step 2: Start Docker Containers
-
-```bash
 docker-compose up -d
 ```
 
-Wait 30 seconds for all services to start.
+> Wait approximately 30 seconds for all services to start.
 
 ---
 
-## Step 3: Create Kafka Topic
+## 2. Upload Data to HDFS
 
-```bash
-docker exec -it flightiq-kafka kafka-topics.sh --create --topic flight-events --bootstrap-server localhost:9092 --partitions 3 --replication-factor 1
-```
-
----
-
-## Step 4: Upload Data to HDFS
+Copy the flights CSV file into the NameNode container:
 
 ```bash
 docker cp data/flights.csv flightiq-namenode:/opt/data/
+```
+
+Create the HDFS directory and upload the data:
+
+```bash
 docker exec -it flightiq-namenode bash -c "hdfs dfs -mkdir -p /raw/flights && hdfs dfs -put /opt/data/flights.csv /raw/flights/"
 ```
 
 ---
 
-## Step 5: Run Spark ETL
+## 3. Run ETL
+
+Copy the Spark ETL script into the Spark Master container:
 
 ```bash
 docker cp spark/etl_spark.py flightiq-spark-master:/opt/spark/work-dir/etl_spark.py
-docker exec -it flightiq-spark-master /opt/spark/bin/spark-submit --master spark://spark-master:7077 --packages org.postgresql:postgresql:42.5.1 /opt/spark/work-dir/etl_spark.py
+```
+
+Run the ETL pipeline using Spark:
+
+```bash
+docker exec -it flightiq-spark-master /opt/spark/bin/spark-submit \
+  --master spark://spark-master:7077 \
+  --packages org.postgresql:postgresql:42.5.1 \
+  /opt/spark/work-dir/etl_spark.py
 ```
 
 ---
 
-## Step 6: Verify Data in PostgreSQL
+## 4. Verify
+
+Check that the PostgreSQL tables were created successfully:
+
+```bash
+docker exec -it flightiq-postgres psql -U flightiq -d flightiq -c "\dt"
+```
+
+Check the number of records in the cleaned flights table:
 
 ```bash
 docker exec -it flightiq-postgres psql -U flightiq -d flightiq -c "SELECT COUNT(*) FROM flights_clean;"
 ```
 
-Expected output:
+### Expected Result
+
+The `flights_clean` table should exist and contain:
 
 ```text
-525370
+525370 rows
 ```
 
 ---
 
-## Step 7: Run Kafka Producer
-
-```bash
-pip install kafka-python
-python kafka/producer.py
-```
-
----
-
-## Step 8: Run Spark Streaming
-
-```bash
-docker cp spark/streaming_processor.py flightiq-spark-master:/opt/spark/work-dir/streaming_processor.py
-docker exec -it flightiq-spark-master /opt/spark/bin/spark-submit --master spark://spark-master:7077 --packages org.apache.spark:spark-sql-kafka-0-10_2.12:3.5.0 /opt/spark/work-dir/streaming_processor.py
-```
-
----
-
-## Access Services
+## Services
 
 | Service | URL |
 |---|---|
-| Kafka UI | http://localhost:8082 |
 | Spark Master | http://localhost:8080 |
 | HDFS NameNode | http://localhost:9870 |
 | pgAdmin | http://localhost:5050 |
 | PostgreSQL | localhost:5432 |
 
+### pgAdmin Credentials
+
+```text
+Email: admin@flightiq.com
+Password: admin
+```
+
+### PostgreSQL Credentials
+
+```text
+Username: flightiq
+Password: flightiq
+Database: flightiq
+Host: localhost
+Port: 5432
+```
+
 ---
 
-## pgAdmin Login
+## Stop
 
-- **Email:** `admin@flightiq.com`
-- **Password:** `admin`
-
-Then add a server with the following settings:
-
-| Setting | Value |
-|---|---|
-| Host | `postgres` |
-| Port | `5432` |
-| Database | `flightiq` |
-| Username | `flightiq` |
-| Password | `flightiq` |
-
----
-
-## Stop Everything
+To stop and remove the running Docker containers:
 
 ```bash
 docker-compose down
@@ -126,25 +118,13 @@ docker-compose down
 
 ## Troubleshooting
 
-### PostgreSQL connection refused in pgAdmin
-
-Use `postgres` as the host, not `localhost`.
-
-### Permission denied in HDFS
+If you encounter HDFS permission issues, run:
 
 ```bash
 docker exec -it flightiq-namenode bash -c "hdfs dfs -chmod -R 777 /"
 ```
 
-### Kafka topic not found
-
-```bash
-docker exec -it flightiq-kafka kafka-topics.sh --list --bootstrap-server localhost:9092
-```
-
-### Spark cannot find PostgreSQL driver
-
-The `--packages org.postgresql:postgresql:42.5.1` flag handles this automatically.
+> **Note:** Using `777` permissions is suitable for local development/testing environments but is not recommended for production deployments.
 
 ---
 
@@ -152,13 +132,13 @@ The `--packages org.postgresql:postgresql:42.5.1` flag handles this automaticall
 
 | Name | Role |
 |---|---|
-| Abdullah Hussein Mohammed Elsayed | ETL + Hive |
-| Roqai A Gamal Hosny Mohamed | Kafka + Producer |
-| Basmala Atef Mohamed Darwesh | ML + Streaming |
-| Marwan Khaled Sayed Boraiy | Power BI + Dashboard |
+| Abdullah Hussein Mohammed Elsayed | ETL + PostgreSQL Setup |
+| Roqai A Gamal Hosny Mohamed | Team Member |
+| Basmala Atef Mohamed Darwesh | Team Member |
+| Marwan Khaled Sayed Boraiy | Team Member |
 
 ---
 
 ## Repository
 
-https://github.com/marwan5aled26/FlightIQ
+[FlightIQ on GitHub](https://github.com/marwan5aled26/FlightIQ)
