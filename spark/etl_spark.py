@@ -2,12 +2,11 @@ from pyspark.sql import SparkSession
 from pyspark.sql.functions import col, coalesce, lit, when
 from pyspark.sql.types import IntegerType, DoubleType, StringType
 
-# Create Spark session with Hive support
+# Create Spark session
 spark = SparkSession.builder \
     .appName("FlightIQ_ETL") \
     .master("spark://spark-master:7077") \
     .config("spark.hadoop.fs.defaultFS", "hdfs://namenode:9000") \
-    .enableHiveSupport() \
     .getOrCreate()
 
 print("Spark Session created successfully")
@@ -19,10 +18,6 @@ df_raw = spark.read \
     .csv("hdfs://namenode:9000/raw/flights/*.csv")
 
 print(f"Raw data loaded with {df_raw.count()} rows")
-
-# Show column names to verify schema
-print("Columns in raw data:")
-print(df_raw.columns)
 
 # Clean data and convert data types
 df_clean = df_raw \
@@ -44,22 +39,13 @@ df_clean = df_raw \
 
 print(f"After cleaning: {df_clean.count()} rows remain")
 
-# Create target column for ML classification
-# 1 means flight delayed more than 15 minutes, 0 means on time
+# Create target column
 df_clean = df_clean.withColumn(
     "IS_DELAYED",
     when(col("ARR_DELAY") > 15, 1).otherwise(0)
 )
 
-# Calculate total delay from all causes for verification
-df_clean = df_clean.withColumn(
-    "TOTAL_DELAY",
-    col("CARRIER_DELAY") + col("WEATHER_DELAY") + 
-    col("NAS_DELAY") + col("SECURITY_DELAY") + 
-    col("LATE_AIRCRAFT_DELAY")
-)
-
-# Save clean data as Parquet with partitioning by year and month
+# Save to HDFS as Parquet
 df_clean.write \
     .mode("overwrite") \
     .partitionBy("YEAR", "MONTH") \
@@ -68,18 +54,26 @@ df_clean.write \
 print("ETL completed successfully")
 print("Data saved as Parquet with YEAR and MONTH partitions")
 
-# Show sample of cleaned data for verification
-print("Sample of cleaned data (first 10 rows):")
+# Write to PostgreSQL
+df_clean.write \
+    .mode("overwrite") \
+    .format("jdbc") \
+    .option("url", "jdbc:postgresql://postgres:5432/flightiq") \
+    .option("dbtable", "flights_clean") \
+    .option("user", "flightiq") \
+    .option("password", "flightiq") \
+    .option("driver", "org.postgresql.Driver") \
+    .save()
+
+print("Data written to PostgreSQL successfully")
+
+# Show sample
+print("Sample of cleaned data:")
 df_clean.select(
     "YEAR", "MONTH", "DAY_OF_MONTH", "DAY_OF_WEEK",
     "OP_UNIQUE_CARRIER", "ORIGIN", "DEST",
     "ARR_DELAY", "DEP_DELAY", "IS_DELAYED"
 ).show(10, truncate=False)
 
-# Show distribution of target variable
-print("Distribution of delayed vs on-time flights:")
-df_clean.groupBy("IS_DELAYED").count().show()
-
-# Stop Spark session
 spark.stop()
 print("Spark session stopped")
