@@ -7,11 +7,9 @@
 
 ---
 
-## 1. Clone & Start
+## 1. Start
 
 ```bash
-git clone https://github.com/marwan5aled26/FlightIQ.git
-cd FlightIQ
 docker-compose up -d
 ```
 
@@ -46,10 +44,7 @@ docker cp spark/etl_spark.py flightiq-spark-master:/opt/spark/work-dir/etl_spark
 Run the ETL pipeline using Spark:
 
 ```bash
-docker exec -it flightiq-spark-master /opt/spark/bin/spark-submit \
-  --master spark://spark-master:7077 \
-  --packages org.postgresql:postgresql:42.5.1 \
-  /opt/spark/work-dir/etl_spark.py
+docker exec -it flightiq-spark-master /opt/spark/bin/spark-submit --master spark://spark-master:7077 --packages org.postgresql:postgresql:42.5.1 /opt/spark/work-dir/etl_spark.py
 ```
 
 ---
@@ -132,7 +127,7 @@ docker exec -it flightiq-namenode bash -c "hdfs dfs -chmod -R 777 /"
 
 | Name | Role |
 |---|---|
-| Abdullah Hussein Mohammed Elsayed | ETL + PostgreSQL Setup |
+| Abdullah Hussein Mohammed Elsayed | Team Member |
 | Roqai A Gamal Hosny Mohamed | Team Member |
 | Basmala Atef Mohamed Darwesh | Team Member |
 | Marwan Khaled Sayed Boraiy | Team Member |
