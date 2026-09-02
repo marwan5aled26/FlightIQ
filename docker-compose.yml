@@ -6,6 +6,8 @@ networks:
 volumes:
   postgres_data:
   pgadmin_data:
+  namenode_data:
+  datanode_data:
 
 services:
   # 1. Apache Zookeeper (Required for Kafka coordination)
@@ -89,6 +91,8 @@ services:
       - CLUSTER_NAME=flightiq-cluster
     env_file:
       - ./hadoop.env
+    volumes:
+      - namenode_data:/tmp/hadoop-root/dfs/name
     networks:
       - flightiq-net
 
@@ -100,6 +104,8 @@ services:
       - namenode
     env_file:
       - ./hadoop.env
+    volumes:
+      - datanode_data:/hadoop/dfs/data
     networks:
       - flightiq-net
 
