@@ -95,7 +95,7 @@ Password: admin
 Username: flightiq
 Password: flightiq
 Database: flightiq
-Host: localhost
+Host: postgres
 Port: 5432
 ```
 
