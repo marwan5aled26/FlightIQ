@@ -128,7 +128,7 @@ docker exec -it flightiq-namenode bash -c "hdfs dfs -chmod -R 777 /"
 | Name | Role |
 |---|---|
 | Abdullah Hussein Mohammed Elsayed | Team Member |
-| Roqai A Gamal Hosny Mohamed | Team Member |
+| Roqaia Gamal Hosny Mohamed | Team Member |
 | Basmala Atef Mohamed Darwesh | Team Member |
 | Marwan Khaled Sayed Boraiy | Team Member |
 
