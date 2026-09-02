@@ -62,6 +62,26 @@ Check the number of records in the cleaned flights table:
 ```bash
 docker exec -it flightiq-postgres psql -U flightiq -d flightiq -c "SELECT COUNT(*) FROM flights_clean;"
 ```
+---
+
+## 5. Create a topic & messages producer
+
+```bash
+python kafka/producer.py
+```
+
+## 6. Streaming Consumer by Spark
+
+Copy the Spark Streaming script into the Spark Master container:
+
+```bash
+docker cp spark/streaming_processor.py flightiq-spark-master:/opt/spark/work-dir/streaming_processor.py 
+```
+Run the Spark pipeline insid Spark container:
+
+```bash
+docker exec -it flightiq-spark-master /opt/spark/bin/spark-submit --master spark://spark-master:7077 --conf spark.executor.memory=1g --conf spark.driver.memory=1g --packages org.apache.spark:spark-sql-kafka-0-10_2.12:3.5.0,org.postgresql:postgresql:42.5.1 /opt/spark/work-dir/streaming_processor.py
+```
 
 ### Expected Result
 
