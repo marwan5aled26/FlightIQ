@@ -22,7 +22,7 @@ docker-compose up -d
 Copy the flights CSV file into the NameNode container:
 
 ```bash
-docker cp data/flights.csv flightiq-namenode:/opt/data/
+docker cp data/flights.csv flightiq-namenode:/tmp/flights.csv
 ```
 
 Create the HDFS directory and upload the data:
@@ -95,7 +95,7 @@ Password: admin
 Username: flightiq
 Password: flightiq
 Database: flightiq
-Host: localhost
+Host: postgres
 Port: 5432
 ```
 
