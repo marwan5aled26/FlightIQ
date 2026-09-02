@@ -42,7 +42,7 @@ print(f"After cleaning: {df_clean.count()} rows remain")
 # Create target column
 df_clean = df_clean.withColumn(
     "IS_DELAYED",
-    when(col("ARR_DELAY") > 15, 1).otherwise(0)
+    when(col("ARR_DELAY") < -15, 1).otherwise(0)
 )
 
 # Save to HDFS as Parquet

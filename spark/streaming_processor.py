@@ -1,7 +1,9 @@
 from pyspark.sql import SparkSession
-from pyspark.sql.functions import from_json, col, window, avg, count, sum, when, current_timestamp, to_utc_timestamp, from_utc_timestamp
+from pyspark.sql.functions import from_json, col, window, avg, count, sum, when, current_timestamp, from_utc_timestamp
 from pyspark.sql.types import StructType, StructField, StringType, IntegerType, DoubleType
+from pyspark.ml import PipelineModel
 
+# Initialize Spark Streaming session
 spark = SparkSession.builder \
     .appName("FlightIQ_Streaming") \
     .master("spark://spark-master:7077") \
@@ -13,6 +15,7 @@ spark.sparkContext.setLogLevel("WARN")
 
 print("Spark Streaming session created")
 
+# Define the schema for incoming JSON messages
 schema = StructType([
     StructField("YEAR", IntegerType(), True),
     StructField("MONTH", IntegerType(), True),
@@ -43,37 +46,73 @@ schema = StructType([
     StructField("LATE_AIRCRAFT_DELAY", DoubleType(), True)
 ])
 
+# Read the real-time stream from Kafka
 kafka_stream = spark.readStream \
     .format("kafka") \
     .option("kafka.bootstrap.servers", "kafka:29092") \
     .option("subscribe", "flight-data") \
-    .option("startingOffsets", "latest") \
+    .option("startingOffsets", "earliest") \
+    .option("failOnDataLoss", "false") \
     .load()
 
 print("Connected to Kafka stream")
 
+# Parse JSON and handle missing values
 flights_stream = kafka_stream.select(
     from_json(col("value").cast("string"), schema).alias("data")
 ).select("data.*")
 
-# Convert processing_time to Egypt timezone (UTC+2 or UTC+3)
+required_cols = ["DAY_OF_WEEK", "CRS_DEP_TIME", "DISTANCE", "DEP_DELAY", "MONTH", "DAY_OF_MONTH", "OP_UNIQUE_CARRIER", "ORIGIN", "DEST"]
+
+for col_name in required_cols:
+    if col_name in ["DAY_OF_WEEK", "CRS_DEP_TIME", "DISTANCE", "DEP_DELAY", "MONTH", "DAY_OF_MONTH"]:
+        flights_stream = flights_stream.fillna({col_name: 0})
+    else:
+        flights_stream = flights_stream.fillna({col_name: "Unknown"})
+
+# Add processing timestamp and convert to Egypt timezone
 flights_stream = flights_stream.withColumn("processing_time_utc", current_timestamp())
 flights_stream = flights_stream.withColumn(
     "processing_time",
     from_utc_timestamp(col("processing_time_utc"), "Africa/Cairo")
 )
 
+# Calculate actual delay flag
 flights_stream = flights_stream.withColumn(
     "IS_DELAYED",
-    when(col("ARR_DELAY") > 15, 1).otherwise(0)
+    when(col("ARR_DELAY") < -18, 1).otherwise(0)
 )
 
-predictions_stream = flights_stream.withColumn(
+# Load the pre-trained ML model and apply it to the stream
+model_path = "hdfs://namenode:9000/models/flight_delay_model"
+try:
+    model = PipelineModel.load(model_path)
+    print("ML model loaded successfully from HDFS!")
+    predictions_stream = model.transform(flights_stream)
+except Exception as e:
+    print(f"Model not found, using rule-based prediction. Error: {e}")
+    predictions_stream = flights_stream.withColumn(
+        "prediction",
+        when(col("ARR_DELAY") < -18, 1.0).otherwise(0.0)
+    )
+
+# Debug: Print individual predictions to console
+debug_pred = predictions_stream.select(
+    "OP_UNIQUE_CARRIER",
+    "ORIGIN",
+    "DEST",
+    "IS_DELAYED",
     "prediction",
-    when(col("ARR_DELAY") > 15, 1.0).otherwise(0.0)
+    "probability"
 )
-print("Using rule-based prediction")
+debug_query2 = debug_pred.writeStream \
+    .outputMode("append") \
+    .format("console") \
+    .option("truncate", "false") \
+    .option("numRows", 20) \
+    .start()
 
+# Aggregate statistics in 1-minute windows
 window_stats = predictions_stream \
     .withWatermark("processing_time", "10 minutes") \
     .groupBy(
@@ -91,6 +130,7 @@ window_stats = window_stats.withColumn("window_start", col("window.start")) \
     .withColumn("window_end", col("window.end")) \
     .drop("window")
 
+# Write aggregated results to PostgreSQL for Power BI
 def write_to_postgres(batch_df, epoch_id):
     if batch_df.count() > 0:
         batch_df.write \
@@ -110,6 +150,7 @@ query = window_stats.writeStream \
     .trigger(processingTime='30 seconds') \
     .start()
 
+# Also show aggregated results in console for monitoring
 console_query = window_stats.writeStream \
     .outputMode("update") \
     .format("console") \
@@ -120,6 +161,7 @@ console_query = window_stats.writeStream \
 print("Streaming queries started")
 print("Press Ctrl+C to stop")
 
+# Await termination
 try:
     spark.streams.awaitAnyTermination()
 except KeyboardInterrupt:

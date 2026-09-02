@@ -5,7 +5,7 @@ from pyspark.ml.classification import RandomForestClassifier
 from pyspark.ml.evaluation import MulticlassClassificationEvaluator
 from pyspark.sql.functions import col, when
 
-# 1. Create Spark Session
+# Initialize Spark session
 spark = SparkSession.builder \
     .appName("FlightIQ_ML_Training") \
     .master("spark://spark-master:7077") \
@@ -15,23 +15,30 @@ spark = SparkSession.builder \
 spark.sparkContext.setLogLevel("WARN")
 
 print("=" * 50)
-print("FlightIQ - ML Model Training")
+print("FlightIQ - ML Model Training (from HDFS)")
 print("=" * 50)
 
-# 2. Read data from PostgreSQL (historical data)
-print("Loading data from PostgreSQL...")
-df = spark.read \
-    .format("jdbc") \
-    .option("url", "jdbc:postgresql://postgres:5432/flightiq") \
-    .option("dbtable", "flights_") \
-    .option("user", "flightiq") \
-    .option("password", "flightiq") \
-    .option("driver", "org.postgresql.Driver") \
-    .load()
-
+# Load historical data from HDFS (Parquet format)
+df = spark.read.parquet("hdfs://namenode:9000/cleaned/flights_clean")
 print(f"Loaded {df.count()} rows")
 
-# 3. Select features and label
+# Check class distribution and compute weights for imbalanced dataset
+print("Class distribution:")
+df.groupBy("IS_DELAYED").count().show()
+
+total = df.count()
+class_counts = df.groupBy("IS_DELAYED").count().collect()
+weights = {}
+for row in class_counts:
+    weights[row[0]] = float(total) / float(row[1])
+print(f"Class weights: {weights}")
+
+df = df.withColumn(
+    "weight",
+    when(col("IS_DELAYED") == 0, weights[0]).otherwise(weights[1])
+)
+
+# Select features for the model
 feature_cols = [
     "DAY_OF_WEEK",
     "CRS_DEP_TIME",
@@ -41,18 +48,29 @@ feature_cols = [
     "DAY_OF_MONTH"
 ]
 
-# 4. Convert categorical columns
-carrier_indexer = StringIndexer(inputCol="OP_UNIQUE_CARRIER", outputCol="carrier_index")
-origin_indexer = StringIndexer(inputCol="ORIGIN", outputCol="origin_index")
-dest_indexer = StringIndexer(inputCol="DEST", outputCol="dest_index")
+# Encode categorical columns (handle invalid categories with 'keep')
+carrier_indexer = StringIndexer(
+    inputCol="OP_UNIQUE_CARRIER",
+    outputCol="carrier_index",
+    handleInvalid="keep"
+)
+origin_indexer = StringIndexer(
+    inputCol="ORIGIN",
+    outputCol="origin_index",
+    handleInvalid="keep"
+)
+dest_indexer = StringIndexer(
+    inputCol="DEST",
+    outputCol="dest_index",
+    handleInvalid="keep"
+)
 
-# 5. Assemble features
+# Assemble features into a single vector and standardize them
 assembler = VectorAssembler(
     inputCols=feature_cols + ["carrier_index", "origin_index", "dest_index"],
     outputCol="features_raw"
 )
 
-# 6. Scale features
 scaler = StandardScaler(
     inputCol="features_raw",
     outputCol="features",
@@ -60,16 +78,17 @@ scaler = StandardScaler(
     withMean=True
 )
 
-# 7. Random Forest Classifier
+# Train a Random Forest classifier using class weights
 rf = RandomForestClassifier(
     labelCol="IS_DELAYED",
     featuresCol="features",
-    numTrees=50,
-    maxDepth=10,
+    weightCol="weight",
+    numTrees=100,
+    maxDepth=15,
     seed=42
 )
 
-# 8. Create Pipeline
+# Build and execute the ML pipeline
 pipeline = Pipeline(stages=[
     carrier_indexer,
     origin_indexer,
@@ -79,36 +98,41 @@ pipeline = Pipeline(stages=[
     rf
 ])
 
-# 9. Train/Test Split
 train_df, test_df = df.randomSplit([0.8, 0.2], seed=42)
-
 print(f"Training rows: {train_df.count()}")
 print(f"Testing rows: {test_df.count()}")
 
-# 10. Train Model
 print("Training model...")
 model = pipeline.fit(train_df)
 
-# 11. Make Predictions
+# Evaluate model accuracy on test data
 print("Making predictions...")
 predictions = model.transform(test_df)
 
-# 12. Evaluate Model
 evaluator = MulticlassClassificationEvaluator(
     labelCol="IS_DELAYED",
     predictionCol="prediction",
     metricName="accuracy"
 )
-
 accuracy = evaluator.evaluate(predictions)
 
 print("=" * 50)
 print(f"Model Accuracy: {accuracy:.4f}")
 print("=" * 50)
 
-# 13. Show predictions
-print("Sample predictions:")
+# Display sample predictions
+print("Sample predictions (all):")
 predictions.select(
+    "OP_UNIQUE_CARRIER",
+    "ORIGIN",
+    "DEST",
+    "IS_DELAYED",
+    "prediction",
+    "probability"
+).show(20, truncate=False)
+
+print("Sample predictions (only delayed):")
+predictions.filter(col("IS_DELAYED") == 1).select(
     "OP_UNIQUE_CARRIER",
     "ORIGIN",
     "DEST",
@@ -117,12 +141,11 @@ predictions.select(
     "probability"
 ).show(10, truncate=False)
 
-# 14. Save model to HDFS
+# Save the trained model to HDFS and locally
 model_path = "hdfs://namenode:9000/models/flight_delay_model"
 model.write().overwrite().save(model_path)
 print(f"Model saved to: {model_path}")
 
-# 15. Also save locally for streaming
 local_model_path = "/opt/spark/work-dir/flight_delay_model"
 model.write().overwrite().save(local_model_path)
 print(f"Model saved locally to: {local_model_path}")
