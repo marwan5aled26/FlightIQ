@@ -12,30 +12,11 @@ count = 0
 
 with open("data/flights-streaming.csv", "r", encoding="utf-8") as file:
     reader = csv.DictReader(file)
-
     for row in reader:
-        try:
-            arr_delay = float(row.get('ARR_DELAY', 0) or 0)
-        except:
-            arr_delay = 0.0
-        
-        row['ARR_DELAY'] = arr_delay
-        row['IS_DELAYED'] = 1 if arr_delay > 15 else 0
-
         producer.send(topic, value=row)
         count += 1
-
-        print(
-            f"Sent {count}: "
-            f"{row['FL_DATE']} | "
-            f"{row['ORIGIN']} -> {row['DEST']} | "
-            f"ARR_DELAY: {row['ARR_DELAY']} | "
-            f"IS_DELAYED: {row['IS_DELAYED']}"
-        )
+        print(f"Sent {count}: {row['FL_DATE']} | {row['ORIGIN']} -> {row['DEST']}")
 
 producer.flush()
 producer.close()
-
-print()
-print("Streaming finished!")
-print(f"Total records: {count}")
+print(f"Total records sent: {count}")
