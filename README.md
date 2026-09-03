@@ -69,7 +69,6 @@ FlightIQ aims to:
 | Database | **PostgreSQL** | SQL analytics and storage of processed results |
 | Visualization | **Power BI** | Historical and real-time dashboards |
 | Containerization | **Docker** | Isolated execution of the project services |
-| Orchestration | **Docker Compose** | Starts and manages the local Big Data environment |
 | Version Control | **Git & GitHub** | Source-code management and collaboration |
 
 ---
